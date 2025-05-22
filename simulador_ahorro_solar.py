@@ -13,7 +13,7 @@ with st.form("solar_form"):
     ubicacion = st.text_input("Ubicación", "Jalisco")
     consumo_kwh_bimestral = st.number_input("Consumo bimestral (kWh)", min_value=100, max_value=4000, value=1000)
     tarifa_kwh = st.number_input("Tarifa actual por kWh (MXN)", min_value=0.5, max_value=10.0, value=2.8)
-    costo_sistema = st.number_input("Costo total del sistema solar (MXN)", min_value=20000, max_value=300000, value=120000)
+    costo_sistema = st.number_input("Costo total del sistema solar (MXN)", min_value=20000, max_value=600000, value=120000)
     inflacion_energetica = st.slider("Inflación energética estimada (%)", min_value=0.0, max_value=15.0, value=7.0) / 100
     submit = st.form_submit_button("Calcular ahorro")
 
