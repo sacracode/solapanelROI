@@ -1,68 +1,90 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Simulador de Ahorro Solar", layout="centered")
+# Configuración
+st.set_page_config(page_title="Simulador de Ahorro Solar CFE", layout="centered")
+st.title("☀️ Simulador de Ahorro con Paneles Solares – México (CFE)")
 
-st.title("☀️ Simulador de Ahorro con Paneles Solares")
-st.markdown("Calcula tu ahorro estimado a lo largo de 25 años al instalar un sistema solar en casa o negocio.")
+# Tipos de usuario
+tipo_usuario = st.selectbox("Selecciona el tipo de usuario:", ["Residencial", "Comercial"])
 
-# Entradas del usuario
-with st.form("solar_form"):
-    ubicacion = st.text_input("Ubicación", "Jalisco")
-    consumo_kwh_bimestral = st.number_input("Consumo bimestral (kWh)", min_value=100, max_value=4000, value=1000)
-    tarifa_kwh = st.number_input("Tarifa actual por kWh (MXN)", min_value=0.5, max_value=10.0, value=2.8)
-    costo_sistema = st.number_input("Costo total del sistema solar (MXN)", min_value=20000, max_value=1000000, value=120000)
-    inflacion_energetica = st.slider("Inflación energética estimada (%)", min_value=0.0, max_value=15.0, value=7.0) / 100
-    submit = st.form_submit_button("Calcular ahorro")
+# Tarifas residenciales extendidas (MXN por kWh)
+tarifas_residenciales = {
+    "1":  {"limites": [150, 280],  "costos": [0.793, 0.956, 3.367]},
+    "1A": {"limites": [300, 600],  "costos": [0.793, 0.956, 3.367]},
+    "1B": {"limites": [400, 800],  "costos": [0.793, 0.956, 3.367]},
+    "1C": {"limites": [850, 1000], "costos": [0.793, 0.956, 3.367]},
+    "1D": {"limites": [1000, 1200],"costos": [0.793, 0.956, 3.367]},
+    "1E": {"limites": [2000, 2500],"costos": [0.793, 0.956, 3.367]},
+    "1F": {"limites": [2500, 3000],"costos": [0.793, 0.956, 3.367]},
+}
 
-if submit:
-    vida_util_anios = 25
+# Tarifas comerciales estimadas
+tarifas_comerciales = {
+    "PDBT":  {"costo_kwh": 4.0, "costo_demanda": 150},
+    "GDBT":  {"costo_kwh": 2.5, "costo_demanda": 300},
+    "GDMTO": {"costo_kwh": 1.8, "costo_demanda": 500},
+}
 
-    # Cálculo de costo bimestral y anual
-    costo_bimestral = consumo_kwh_bimestral * tarifa_kwh
-    ahorro_anual_sin_inflacion = (costo_bimestral * 6)  # 6 bimestres en un año
+IVA = 0.16
 
-    ahorro_acumulado = []
-    ahorro_anual = ahorro_anual_sin_inflacion
-    recuperacion_anio = None
-    ahorro_total = 0
+# Función residencial
+def calcular_costo_residencial(consumo, tarifa):
+    limites = tarifas_residenciales[tarifa]["limites"]
+    costos = tarifas_residenciales[tarifa]["costos"]
+    consumo_bloques = [0, 0, 0]
+    costos_bloques = [0, 0, 0]
 
-    for year in range(1, vida_util_anios + 1):
-        ahorro_total += ahorro_anual
-        ahorro_acumulado.append(ahorro_total)
-        if not recuperacion_anio and ahorro_total >= costo_sistema:
-            recuperacion_anio = year
-        ahorro_anual *= (1 + inflacion_energetica)
+    if consumo <= limites[0]:
+        consumo_bloques[0] = consumo
+    elif consumo <= limites[1]:
+        consumo_bloques[0] = limites[0]
+        consumo_bloques[1] = consumo - limites[0]
+    else:
+        consumo_bloques[0] = limites[0]
+        consumo_bloques[1] = limites[1] - limites[0]
+        consumo_bloques[2] = consumo - limites[1]
 
-    roi = ahorro_total / costo_sistema
-    tiempo_recuperacion = recuperacion_anio if recuperacion_anio else vida_util_anios
+    for i in range(3):
+        costos_bloques[i] = consumo_bloques[i] * costos[i]
 
-    # Mostrar resultados
-    st.subheader("Resultados estimados:")
-    st.write(f"**Ubicación:** {ubicacion}")
-    st.write(f"**Costo bimestral actual de luz:** ${costo_bimestral:,.2f} MXN")
-    st.write(f"**Ahorro total estimado en 25 años:** ${ahorro_total:,.2f} MXN")
-    st.write(f"**Retorno sobre inversión (ROI):** {roi:.2f}x")
-    st.write(f"**Años estimados para recuperar la inversión:** {tiempo_recuperacion} años")
+    subtotal = sum(costos_bloques)
+    total = subtotal * (1 + IVA)
+    return consumo_bloques, costos_bloques, subtotal, total
 
-    # Tabla y gráfica
-    df_ahorro = pd.DataFrame({
-        'Año': list(range(1, vida_util_anios + 1)),
-        'Ahorro acumulado (MXN)': ahorro_acumulado
-    })
+# ENTRADAS
+if tipo_usuario == "Residencial":
+    tarifa = st.selectbox("Selecciona tu tarifa:", list(tarifas_residenciales.keys()))
+    consumo = st.number_input("Ingresa tu consumo bimestral en kWh:", min_value=0, step=1)
 
-    fig, ax = plt.subplots()
-    ax.plot(df_ahorro['Año'], df_ahorro['Ahorro acumulado (MXN)'], label="Ahorro acumulado")
-    ax.axhline(y=costo_sistema, color='red', linestyle='--', label='Costo del sistema')
-    if recuperacion_anio:
-        ax.axvline(x=recuperacion_anio, color='green', linestyle=':', label=f"ROI se paga en año {recuperacion_anio}")
-    ax.set_xlabel("Año")
-    ax.set_ylabel("MXN")
-    ax.set_title("Proyección de Ahorro Acumulado")
-    ax.legend()
+    if st.button("Calcular"):
+        consumo_bloques, costos_bloques, subtotal, total = calcular_costo_residencial(consumo, tarifa)
+        st.subheader("Desglose estilo CFE:")
+        df = pd.DataFrame({
+            "Bloque": ["Básico", "Intermedio", "Excedente"],
+            "Consumo (kWh)": consumo_bloques,
+            "Costo (MXN)": [round(x, 2) for x in costos_bloques]
+        })
+        st.table(df)
+        st.write(f"**Subtotal (sin IVA):** ${subtotal:.2f} MXN")
+        st.write(f"**Total con IVA (16%):** ${total:.2f} MXN")
+        st.caption("💡 Estos son estimados con base en las tarifas públicas de CFE. El precio real será el que indique tu recibo actual.")
 
-    st.pyplot(fig)
+elif tipo_usuario == "Comercial":
+    tarifa = st.selectbox("Selecciona tu tarifa:", list(tarifas_comerciales.keys()))
+    consumo = st.number_input("Ingresa tu consumo mensual en kWh:", min_value=0, step=1)
+    demanda_real_kw = st.number_input("Demanda máxima registrada (kW):", min_value=0.0, step=1.0)
 
-    st.caption("Esta herramienta es una estimación educativa. Para un análisis exacto, consulta a tu proveedor solar.")
+    if st.button("Calcular"):
+        datos = tarifas_comerciales[tarifa]
+        energia_total = consumo * datos["costo_kwh"]
+        demanda_total = demanda_real_kw * datos["costo_demanda"]
+        subtotal = energia_total + demanda_total
+        total = subtotal * (1 + IVA)
+
+        st.subheader("Desglose comercial:")
+        st.write(f"🔌 Energía: {consumo} kWh × ${datos['costo_kwh']:.2f} = ${energia_total:.2f}")
+        st.write(f"⚡ Demanda: {demanda_real_kw} kW × ${datos['costo_demanda']:.2f} = ${demanda_total:.2f}")
+        st.write(f"**Subtotal (sin IVA):** ${subtotal:.2f} MXN")
+        st.write(f"**Total con IVA (16%):** ${total:.2f} MXN")
+        st.caption("💡 Estos son estimados con base en las tarifas públicas de CFE. El precio real será el que indique tu recibo actual.")
