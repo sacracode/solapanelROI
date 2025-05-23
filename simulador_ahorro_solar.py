@@ -8,7 +8,7 @@ st.title("☀️ Simulador de Ahorro con Paneles Solares – México (CFE)")
 tipo_usuario = st.selectbox("Selecciona el tipo de usuario:", ["Residencial", "Comercial"])
 IVA = 0.16
 
-# Tarifas residenciales con bloques por tarifa de CFE
+# Tarifas residenciales con bloques reales
 tarifas_residenciales = {
     "1":  {"costos": [0.793, 0.956, 3.367], "limites": [150, 280]},
     "1A": {"costos": [0.793, 0.956, 3.367], "limites": [300, 600]},
@@ -19,11 +19,11 @@ tarifas_residenciales = {
     "1F": {"costos": [0.793, 0.956, 3.367], "limites": [2500, 3000]},
 }
 
-# Tarifas comerciales estimadas
+# Tarifas comerciales aproximadas
 tarifas_comerciales = {
-    "PDBT": {"costo_kwh": 4.0, "costo_demanda": 150},
-    "GDBT": {"costo_kwh": 2.5, "costo_demanda": 300},
-    "GDMTO": {"costo_kwh": 1.8, "costo_demanda": 500},
+    "PDBT": {"costo_kwh": 5.3, "costo_demanda": 150},
+    "GDBT": {"costo_kwh": 4.1, "costo_demanda": 300},
+    "GDMTO": {"costo_kwh": 3.8, "costo_demanda": 500},
 }
 
 def calcular_desglose(consumo, tarifa_key):
@@ -47,26 +47,26 @@ def calcular_desglose(consumo, tarifa_key):
 
     return bloques, costos_bloques, subtotal, total
 
-def calcular_roi(consumo_bimestral, tarifa_kwh, costo_panel, mensualidad_panel, anios=25):
-    ahorro_mensual = consumo_bimestral * tarifa_kwh / 2
-    ahorro_acumulado, costo_acumulado = [], []
+def calcular_roi(consumo_bimestral, tarifa_kwh, costo_panel, bimestralidad, anios=25):
+    ahorro_bimestral = consumo_bimestral * tarifa_kwh
+    ahorro_acumulado, pagos_acumulados = [], []
     saldo = 0
     roi_year = None
 
     for anio in range(1, anios + 1):
-        saldo += ahorro_mensual * 12
-        costo = mensualidad_panel * 12 * anio
+        saldo += ahorro_bimestral * 6
+        pago = bimestralidad * 6 * anio
         ahorro_acumulado.append(saldo)
-        costo_acumulado.append(costo)
+        pagos_acumulados.append(pago)
         if roi_year is None and saldo >= costo_panel:
             roi_year = anio
 
-    return ahorro_acumulado, costo_acumulado, roi_year
+    return ahorro_acumulado, pagos_acumulados, roi_year
 
-# Entradas comunes
+# Entradas generales
 consumo = st.number_input("Ingresa tu consumo bimestral en kWh:", min_value=0, step=1)
 costo_panel = st.number_input("Costo total del sistema solar (MXN):", min_value=10000, step=1000, value=120000)
-mensualidad = st.number_input("Pago mensual estimado del panel solar (MXN):", min_value=0, step=100, value=3000)
+bimestralidad = st.number_input("Pago bimestral estimado del panel solar (MXN):", min_value=0, step=100, value=3000)
 tarifa_kwh_manual = st.number_input("Tarifa promedio por kWh actual (MXN):", min_value=0.5, step=0.1, value=2.8)
 
 if tipo_usuario == "Residencial":
@@ -85,7 +85,7 @@ if tipo_usuario == "Residencial":
         st.write(f"**Subtotal (sin IVA):** ${subtotal:.2f} MXN")
         st.write(f"**Total con IVA (16%):** ${total:.2f} MXN")
 
-        ahorro, pagos, roi_year = calcular_roi(consumo, tarifa_kwh_manual, costo_panel, mensualidad)
+        ahorro, pagos, roi_year = calcular_roi(consumo, tarifa_kwh_manual, costo_panel, bimestralidad)
 
         st.subheader("🔁 Proyección de Ahorro vs Costo del Panel:")
         fig, ax = plt.subplots()
@@ -116,7 +116,7 @@ elif tipo_usuario == "Comercial":
         st.write(f"**Subtotal (sin IVA):** ${subtotal:.2f} MXN")
         st.write(f"**Total con IVA (16%):** ${total:.2f} MXN")
 
-        ahorro, pagos, roi_year = calcular_roi(consumo, datos["costo_kwh"], costo_panel, mensualidad)
+        ahorro, pagos, roi_year = calcular_roi(consumo, datos["costo_kwh"], costo_panel, bimestralidad)
 
         st.subheader("🔁 Proyección de Ahorro vs Costo del Panel:")
         fig, ax = plt.subplots()
