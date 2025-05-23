@@ -8,9 +8,15 @@ st.title("☀️ Simulador de Ahorro con Paneles Solares – México (CFE)")
 tipo_usuario = st.selectbox("Selecciona el tipo de usuario:", ["Residencial", "Comercial"])
 IVA = 0.16
 
-# Tarifas actualizadas para uso residencial (1B como ejemplo)
+# Tarifas residenciales con bloques por tarifa de CFE
 tarifas_residenciales = {
-    "1": {"costos": [1.0, 1.3, 3.8], "limites": [150, 350]},
+    "1":  {"costos": [0.793, 0.956, 3.367], "limites": [150, 280]},
+    "1A": {"costos": [0.793, 0.956, 3.367], "limites": [300, 600]},
+    "1B": {"costos": [0.793, 0.956, 3.367], "limites": [400, 800]},
+    "1C": {"costos": [0.793, 0.956, 3.367], "limites": [850, 1000]},
+    "1D": {"costos": [0.793, 0.956, 3.367], "limites": [1000, 1200]},
+    "1E": {"costos": [0.793, 0.956, 3.367], "limites": [2000, 2500]},
+    "1F": {"costos": [0.793, 0.956, 3.367], "limites": [2500, 3000]},
 }
 
 # Tarifas comerciales estimadas
@@ -71,7 +77,7 @@ if tipo_usuario == "Residencial":
 
         st.subheader("📊 Desglose estilo CFE:")
         df = pd.DataFrame({
-            "Bloque": ["Básico (hasta 150)", "Intermedio (151-350)", "Excedente (351+)"],
+            "Bloque": ["Básico", "Intermedio", "Excedente"],
             "Consumo (kWh)": bloques,
             "Costo (MXN)": [round(c, 2) for c in costos_bloques]
         })
