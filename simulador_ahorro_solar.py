@@ -8,47 +8,38 @@ st.title("☀️ Simulador de Ahorro con Paneles Solares – México (CFE)")
 tipo_usuario = st.selectbox("Selecciona el tipo de usuario:", ["Residencial", "Comercial"])
 IVA = 0.16
 
-# Tarifas residenciales con bloques reales
-tarifas_residenciales = {
-    "1":  {"costos": [0.793, 0.956, 3.367], "limites": [150, 280]},
-    "1A": {"costos": [0.793, 0.956, 3.367], "limites": [300, 600]},
-    "1B": {"costos": [0.793, 0.956, 3.367], "limites": [400, 800]},
-    "1C": {"costos": [0.793, 0.956, 3.367], "limites": [850, 1000]},
-    "1D": {"costos": [0.793, 0.956, 3.367], "limites": [1000, 1200]},
-    "1E": {"costos": [0.793, 0.956, 3.367], "limites": [2000, 2500]},
-    "1F": {"costos": [0.793, 0.956, 3.367], "limites": [2500, 3000]},
+# Tarifas por bloque fijas
+tarifa_fija = {
+    "basico": 1.0,
+    "intermedio": 1.3,
+    "excedente": 3.0,
 }
 
-# Tarifas comerciales aproximadas
-tarifas_comerciales = {
-    "PDBT": {"costo_kwh": 5.3, "costo_demanda": 150},
-    "GDBT": {"costo_kwh": 4.1, "costo_demanda": 300},
-    "GDMTO": {"costo_kwh": 3.8, "costo_demanda": 500},
-}
+def calcular_bloques_fijos(consumo):
+    bloques = [0, 0, 0]  # básico, intermedio, excedente
 
-def calcular_desglose(consumo, tarifa_key):
-    limites = tarifas_residenciales[tarifa_key]["limites"]
-    costos = tarifas_residenciales[tarifa_key]["costos"]
-    bloques = [0, 0, 0]
-
-    if consumo <= limites[0]:
+    if consumo <= 150:
         bloques[0] = consumo
-    elif consumo <= limites[1]:
-        bloques[0] = limites[0]
-        bloques[1] = consumo - limites[0]
+    elif consumo <= 350:
+        bloques[0] = 150
+        bloques[1] = consumo - 150
     else:
-        bloques[0] = limites[0]
-        bloques[1] = limites[1] - limites[0]
-        bloques[2] = consumo - limites[1]
+        bloques[0] = 150
+        bloques[1] = 200
+        bloques[2] = consumo - 350
 
-    costos_bloques = [bloques[i] * costos[i] for i in range(3)]
-    subtotal = sum(costos_bloques)
+    costos = [
+        bloques[0] * tarifa_fija["basico"],
+        bloques[1] * tarifa_fija["intermedio"],
+        bloques[2] * tarifa_fija["excedente"],
+    ]
+    subtotal = sum(costos)
     total = subtotal * (1 + IVA)
 
-    return bloques, costos_bloques, subtotal, total
+    return bloques, costos, subtotal, total
 
-def calcular_roi(consumo_bimestral, tarifa_kwh, costo_panel, bimestralidad, anios=25):
-    ahorro_bimestral = consumo_bimestral * tarifa_kwh
+def calcular_roi(consumo_bimestral, tarifa_aplicada, costo_panel, bimestralidad, anios=25):
+    ahorro_bimestral = consumo_bimestral * tarifa_aplicada
     ahorro_acumulado, pagos_acumulados = [], []
     saldo = 0
     roi_year = None
@@ -63,29 +54,27 @@ def calcular_roi(consumo_bimestral, tarifa_kwh, costo_panel, bimestralidad, anio
 
     return ahorro_acumulado, pagos_acumulados, roi_year
 
-# Entradas generales
+# Entradas comunes
 consumo = st.number_input("Ingresa tu consumo bimestral en kWh:", min_value=0, step=1)
 costo_panel = st.number_input("Costo total del sistema solar (MXN):", min_value=10000, step=1000, value=120000)
 bimestralidad = st.number_input("Pago bimestral estimado del panel solar (MXN):", min_value=0, step=100, value=3000)
-tarifa_kwh_manual = st.number_input("Tarifa promedio por kWh actual (MXN):", min_value=0.5, step=0.1, value=2.8)
 
 if tipo_usuario == "Residencial":
-    tarifa = st.selectbox("Selecciona tu tarifa:", list(tarifas_residenciales.keys()))
-
     if st.button("Calcular Residencial"):
-        bloques, costos_bloques, subtotal, total = calcular_desglose(consumo, tarifa)
+        bloques, costos, subtotal, total = calcular_bloques_fijos(consumo)
 
         st.subheader("📊 Desglose estilo CFE:")
         df = pd.DataFrame({
-            "Bloque": ["Básico", "Intermedio", "Excedente"],
+            "Bloque": ["Básico (1.00)", "Intermedio (1.30)", "Excedente (3.00)"],
             "Consumo (kWh)": bloques,
-            "Costo (MXN)": [round(c, 2) for c in costos_bloques]
+            "Costo (MXN)": [round(c, 2) for c in costos]
         })
         st.table(df)
         st.write(f"**Subtotal (sin IVA):** ${subtotal:.2f} MXN")
         st.write(f"**Total con IVA (16%):** ${total:.2f} MXN")
 
-        ahorro, pagos, roi_year = calcular_roi(consumo, tarifa_kwh_manual, costo_panel, bimestralidad)
+        tarifa_aplicada = (subtotal / consumo) if consumo > 0 else 0
+        ahorro, pagos, roi_year = calcular_roi(consumo, tarifa_aplicada, costo_panel, bimestralidad)
 
         st.subheader("🔁 Proyección de Ahorro vs Costo del Panel:")
         fig, ax = plt.subplots()
@@ -100,23 +89,31 @@ if tipo_usuario == "Residencial":
         st.pyplot(fig)
 
 elif tipo_usuario == "Comercial":
+    tarifas_comerciales = {
+        "PDBT": {"costo_kwh": 5.3, "costo_demanda": 150},
+        "GDBT": {"costo_kwh": 4.1, "costo_demanda": 300},
+        "GDMTO": {"costo_kwh": 3.8, "costo_demanda": 500},
+    }
+
     tarifa = st.selectbox("Selecciona tu tarifa:", list(tarifas_comerciales.keys()))
     demanda_kw = st.number_input("Demanda máxima registrada (kW):", min_value=0.0, step=1.0)
+    incluye_iva = st.checkbox("¿La tarifa por kWh ya incluye IVA?", value=True)
 
     if st.button("Calcular Comercial"):
         datos = tarifas_comerciales[tarifa]
         energia = consumo * datos["costo_kwh"]
         demanda = demanda_kw * datos["costo_demanda"]
         subtotal = energia + demanda
-        total = subtotal * (1 + IVA)
+        total = subtotal if incluye_iva else subtotal * (1 + IVA)
 
         st.subheader("📊 Cálculo Comercial:")
         st.write(f"Energía: {consumo} kWh × ${datos['costo_kwh']} = ${energia:.2f}")
         st.write(f"Demanda: {demanda_kw} kW × ${datos['costo_demanda']} = ${demanda:.2f}")
-        st.write(f"**Subtotal (sin IVA):** ${subtotal:.2f} MXN")
-        st.write(f"**Total con IVA (16%):** ${total:.2f} MXN")
+        st.write(f"**Subtotal:** ${subtotal:.2f} MXN")
+        st.write(f"**Total {'(incluye IVA)' if incluye_iva else 'con IVA (16%)'}:** ${total:.2f} MXN")
 
-        ahorro, pagos, roi_year = calcular_roi(consumo, datos["costo_kwh"], costo_panel, bimestralidad)
+        tarifa_aplicada = datos["costo_kwh"]
+        ahorro, pagos, roi_year = calcular_roi(consumo, tarifa_aplicada, costo_panel, bimestralidad)
 
         st.subheader("🔁 Proyección de Ahorro vs Costo del Panel:")
         fig, ax = plt.subplots()
@@ -130,4 +127,4 @@ elif tipo_usuario == "Comercial":
         ax.legend()
         st.pyplot(fig)
 
-st.caption("💡 Estos son estimados basados en tarifas públicas de CFE. Consulta tu recibo para información precisa.")
+st.caption("💡 Estos son estimados basados en estructuras de tarifas públicas de CFE. Consulta tu recibo para información precisa.")
