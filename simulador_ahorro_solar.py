@@ -1,14 +1,15 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
-st.set_page_config(page_title="Simulador de Ahorro Solar con ROI", layout="centered")
-st.title("☀️ Simulador de Ahorro con Paneles Solares – México (CFE)")
+st.set_page_config(page_title="Simulador Solar ROI - Profesional", layout="centered")
+st.title("☀️ Simulador de Ahorro con Paneles Solares – Profesional")
 
 tipo_usuario = st.selectbox("Selecciona el tipo de usuario:", ["Residencial", "Comercial"])
 IVA = 0.16
 
-# Tarifas por bloque fijas
+# Tarifas residenciales por bloque
 tarifa_fija = {
     "basico": 1.0,
     "intermedio": 1.3,
@@ -16,8 +17,7 @@ tarifa_fija = {
 }
 
 def calcular_bloques_fijos(consumo):
-    bloques = [0, 0, 0]  # básico, intermedio, excedente
-
+    bloques = [0, 0, 0]
     if consumo <= 150:
         bloques[0] = consumo
     elif consumo <= 350:
@@ -35,30 +35,26 @@ def calcular_bloques_fijos(consumo):
     ]
     subtotal = sum(costos)
     total = subtotal * (1 + IVA)
-
     return bloques, costos, subtotal, total
 
-def calcular_roi(consumo_bimestral, tarifa_aplicada, costo_panel, bimestralidad, anios=25):
-    ahorro_bimestral = consumo_bimestral * tarifa_aplicada
-    ahorro_acumulado, pagos_acumulados = [], []
+def calcular_roi_mensual(consumo_bimestral, tarifa_kwh, costo_panel, anios=25):
+    ahorro_mensual = (consumo_bimestral / 2) * tarifa_kwh
+    ahorro_acumulado = []
+    meses = anios * 12
     saldo = 0
-    roi_year = None
-
-    for anio in range(1, anios + 1):
-        saldo += ahorro_bimestral * 6
-        pago = bimestralidad * 6 * anio
+    roi_mes = None
+    for mes in range(1, meses + 1):
+        saldo += ahorro_mensual
         ahorro_acumulado.append(saldo)
-        pagos_acumulados.append(pago)
-        if roi_year is None and saldo >= costo_panel:
-            roi_year = anio
+        if roi_mes is None and saldo >= costo_panel:
+            roi_mes = mes
+    return ahorro_acumulado, roi_mes
 
-    return ahorro_acumulado, pagos_acumulados, roi_year
-
-# Entradas comunes
+# Entradas generales
 consumo = st.number_input("Ingresa tu consumo bimestral en kWh:", min_value=0, step=1)
 costo_panel = st.number_input("Costo total del sistema solar (MXN):", min_value=10000, step=1000, value=120000)
-bimestralidad = st.number_input("Pago bimestral estimado del panel solar (MXN):", min_value=0, step=100, value=3000)
 
+# Modo Residencial
 if tipo_usuario == "Residencial":
     if st.button("Calcular Residencial"):
         bloques, costos, subtotal, total = calcular_bloques_fijos(consumo)
@@ -73,21 +69,27 @@ if tipo_usuario == "Residencial":
         st.write(f"**Subtotal (sin IVA):** ${subtotal:.2f} MXN")
         st.write(f"**Total con IVA (16%):** ${total:.2f} MXN")
 
-        tarifa_aplicada = (subtotal / consumo) if consumo > 0 else 0
-        ahorro, pagos, roi_year = calcular_roi(consumo, tarifa_aplicada, costo_panel, bimestralidad)
+        tarifa_aplicada = subtotal / consumo if consumo > 0 else 0
+        ahorro, roi_mes = calcular_roi_mensual(consumo, tarifa_aplicada, costo_panel)
 
-        st.subheader("🔁 Proyección de Ahorro vs Costo del Panel:")
-        fig, ax = plt.subplots()
-        ax.plot(range(1, 26), ahorro, label="Ahorro Acumulado", linewidth=2)
-        ax.plot(range(1, 26), pagos, label="Pagos del Sistema", linestyle="--")
-        if roi_year:
-            ax.axvline(x=roi_year, color='green', linestyle=':', label=f"ROI en año {roi_year}")
-        ax.set_xlabel("Año")
-        ax.set_ylabel("MXN")
-        ax.set_title("Retorno de Inversión (ROI)")
+        st.subheader("📈 Proyección de Retorno de Inversión (ROI)")
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(range(1, len(ahorro) + 1), ahorro, label="Ahorro Acumulado", color="#007f5f", linewidth=2)
+        ax.axhline(y=costo_panel, color="#ffa500", linestyle="--", label=f"Costo Panel (${costo_panel})")
+        if roi_mes:
+            ax.axvline(x=roi_mes, color="#38b000", linestyle=":", label=f"ROI en mes {roi_mes} ({roi_mes // 12} años)")
+
+        ax.set_xlabel("Meses", fontsize=12)
+        ax.set_ylabel("MXN", fontsize=12)
+        ax.set_title("📊 Ahorro Acumulado vs Inversión Inicial", fontsize=14)
         ax.legend()
+        ax.grid(alpha=0.3)
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"${int(x):,}"))
+        ax.xaxis.set_major_locator(ticker.MultipleLocator(12))
+        ax.set_facecolor('#f5f5f5')
         st.pyplot(fig)
 
+# Modo Comercial
 elif tipo_usuario == "Comercial":
     tarifas_comerciales = {
         "PDBT": {"costo_kwh": 5.3, "costo_demanda": 150},
@@ -113,18 +115,23 @@ elif tipo_usuario == "Comercial":
         st.write(f"**Total {'(incluye IVA)' if incluye_iva else 'con IVA (16%)'}:** ${total:.2f} MXN")
 
         tarifa_aplicada = datos["costo_kwh"]
-        ahorro, pagos, roi_year = calcular_roi(consumo, tarifa_aplicada, costo_panel, bimestralidad)
+        ahorro, roi_mes = calcular_roi_mensual(consumo, tarifa_aplicada, costo_panel)
 
-        st.subheader("🔁 Proyección de Ahorro vs Costo del Panel:")
-        fig, ax = plt.subplots()
-        ax.plot(range(1, 26), ahorro, label="Ahorro Acumulado", linewidth=2)
-        ax.plot(range(1, 26), pagos, label="Pagos del Sistema", linestyle="--")
-        if roi_year:
-            ax.axvline(x=roi_year, color='green', linestyle=':', label=f"ROI en año {roi_year}")
-        ax.set_xlabel("Año")
-        ax.set_ylabel("MXN")
-        ax.set_title("Retorno de Inversión (ROI)")
+        st.subheader("📈 Proyección de Retorno de Inversión (ROI)")
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(range(1, len(ahorro) + 1), ahorro, label="Ahorro Acumulado", color="#007f5f", linewidth=2)
+        ax.axhline(y=costo_panel, color="#ffa500", linestyle="--", label=f"Costo Panel (${costo_panel})")
+        if roi_mes:
+            ax.axvline(x=roi_mes, color="#38b000", linestyle=":", label=f"ROI en mes {roi_mes} ({roi_mes // 12} años)")
+
+        ax.set_xlabel("Meses", fontsize=12)
+        ax.set_ylabel("MXN", fontsize=12)
+        ax.set_title("📊 Ahorro Acumulado vs Inversión Inicial", fontsize=14)
         ax.legend()
+        ax.grid(alpha=0.3)
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"${int(x):,}"))
+        ax.xaxis.set_major_locator(ticker.MultipleLocator(12))
+        ax.set_facecolor('#f5f5f5')
         st.pyplot(fig)
 
-st.caption("💡 Estos son estimados basados en estructuras de tarifas públicas de CFE. Consulta tu recibo para información precisa.")
+st.caption("💡 Este simulador es una herramienta educativa. Consulta tus tarifas oficiales en tu recibo CFE o con tu proveedor de energía.")
